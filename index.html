@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Vibe Golf — ship it to the target</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #121826;
+    --panel-2: #0e1420;
+    --line: #1e2a3d;
+    --text: #e7eefc;
+    --muted: #8595b3;
+    --accent: #4ad6c4;
+    --accent-2: #6ea8ff;
+    --target: #ffcf5c;
+    --danger: #ff6b8b;
+    --good: #7ef0a6;
+    --shadow: 0 10px 40px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 800px at 70% -10%, #10203a 0%, var(--bg) 55%);
+    color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 16px;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  header { text-align: center; }
+  header h1 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: .3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+  .wrap { width: min(94vw, 940px); display: flex; flex-direction: column; gap: 10px; }
+
+  .hud {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .stat {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: var(--shadow);
+  }
+  .stat .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+  .stat .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat .v.score { color: var(--good); }
+
+  .stage {
+    position: relative;
+    /* fit within both the column width and the leftover viewport height */
+    width: min(100%, calc((100vh - 288px) * 1.5625));
+    width: min(100%, calc((100dvh - 288px) * 1.5625));
+    align-self: center;
+    aspect-ratio: 1000 / 640;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow), inset 0 0 90px rgba(0,0,0,.5);
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px;
+    background: rgba(6,10,18,.78);
+    backdrop-filter: blur(3px);
+    text-align: center;
+    padding: 24px;
+  }
+  .overlay.show { display: flex; animation: pop .35s ease; }
+  @keyframes pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+  .overlay h2 { margin: 0; font-size: 26px; color: var(--good); }
+  .overlay .summary { color: var(--text); font-size: 15px; }
+  .overlay .summary b { color: var(--accent); }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+  .skills { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+  .skill {
+    position: relative;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 11px;
+    padding: 9px 13px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    min-width: 118px;
+    transition: transform .08s ease, border-color .15s ease, background .15s ease;
+  }
+  .skill:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--accent-2); }
+  .skill:disabled { opacity: .4; cursor: not-allowed; }
+  .skill.active { border-color: var(--accent); background: linear-gradient(180deg, #14312e, #0e1a1e); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .skill .cost { color: var(--danger); font-size: 11px; font-weight: 500; }
+  .skill .desc { color: var(--muted); font-size: 11px; font-weight: 400; }
+
+  .btn {
+    background: linear-gradient(180deg, #1b2740, #131c30);
+    border: 1px solid var(--accent-2);
+    color: var(--text);
+    border-radius: 11px;
+    padding: 0 18px;
+    font: inherit; font-weight: 650;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    transition: transform .08s ease, filter .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); filter: brightness(1.12); }
+  .btn svg { width: 16px; height: 16px; }
+
+  .hint { color: var(--muted); font-size: 12.5px; text-align: center; }
+  .hint b { color: var(--accent); }
+  @media (max-width: 640px) {
+    .hud { grid-template-columns: repeat(2, 1fr); }
+    .skill { min-width: 0; flex: 1; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Vibe Golf</h1>
+    <p>Ship your changes to the target. More scope flies further — but lands wilder.</p>
+  </header>
+
+  <div class="wrap">
+    <div class="hud">
+      <div class="stat"><div class="k">Prompts shipped</div><div class="v" id="stat-shots">0</div></div>
+      <div class="stat"><div class="k">Distance travelled</div><div class="v" id="stat-dist">0</div></div>
+      <div class="stat"><div class="k">Time elapsed</div><div class="v" id="stat-time">0:00</div></div>
+      <div class="stat"><div class="k">Score</div><div class="v score" id="stat-score">0</div></div>
+    </div>
+
+    <div class="stage" id="stage">
+      <canvas id="c"></canvas>
+      <div class="overlay" id="overlay">
+        <h2 id="ov-title">Feature delivered 🚀</h2>
+        <div class="summary" id="ov-summary"></div>
+        <button class="btn" id="ov-new">Start a new course</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="skills" id="skills">
+        <button class="skill" data-skill="plan">
+          <span>/plan</span>
+          <span class="desc">Halve next prompt's spread</span>
+          <span class="cost">+25s</span>
+        </button>
+        <button class="skill" data-skill="plan-review">
+          <span>/plan-review</span>
+          <span class="desc">Halve spread again (needs /plan)</span>
+          <span class="cost">+15s</span>
+        </button>
+        <button class="skill" data-skill="code-review">
+          <span>/code-review</span>
+          <span class="desc">Bias landing toward aim</span>
+          <span class="cost">+20s</span>
+        </button>
+        <button class="skill" data-skill="refactor">
+          <span>/refactor</span>
+          <span class="desc">Select, then tap a block to delete</span>
+          <span class="cost">+40s</span>
+        </button>
+      </div>
+      <button class="btn" id="new-course" title="Abandon this course and randomize a new one">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        New course
+      </button>
+    </div>
+
+    <div class="hint">
+      Drag forward from the ball toward the target: direction sets aim, drag length sets <b>scope</b>.
+      Release to ship — the ball <b>bounces</b> off the legacy-code blocks. Select <b>/refactor</b>,
+      then tap a flashing block to delete it. Skills de-risk a prompt but each spends time.
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- world & constants ---------------------------------------------------
+  const W = 1000, H = 640;
+  const MARGIN = 70;
+  const TARGET_R = 26;
+  const MAX_REACH = 1.8;         // max shot distance = 1.8 * distanceToTarget
+  const SPREAD_DIST = 900;       // absolute travel (world units) at which the cone is a full 180°
+  const FLIGHT_MS = 640;         // eased over the whole bounced path
+  const BALL_R = 8.5;            // drawn ball radius; counts toward holing out
+  const OBSTACLES = 10;
+  const STORE_KEY = "vibe-golf-v2";
+  const VERSION = 2;             // bumped: courses now carry obstacles
+
+  const SKILLS = {
+    "plan":        { penalty: 25 },
+    "plan-review": { penalty: 15 },
+    "code-review": { penalty: 20 },
+    "refactor":    { penalty: 40 },
+  };
+
+  // ---- deterministic RNG (mulberry32) --------------------------------------
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---- geometry ------------------------------------------------------------
+  function pointInPoly(px, py, verts) {
+    let inside = false;
+    for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+      const a = verts[i], b = verts[j];
+      if ((a.y > py) !== (b.y > py) &&
+          px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+
+  function distToSeg(px, py, ax, ay, bx, by) {
+    const ex = bx - ax, ey = by - ay;
+    const len2 = ex * ex + ey * ey || 1;
+    let t = ((px - ax) * ex + (py - ay) * ey) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + ex * t), py - (ay + ey * t));
+  }
+  function distToPolyOrLine(px, py, verts) {
+    let d = Infinity;
+    for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+      d = Math.min(d, distToSeg(px, py, verts[j].x, verts[j].y, verts[i].x, verts[i].y));
+    }
+    return d;
+  }
+
+  function makeObstacle(r, cx, cy) {
+    const n = 6 + Math.floor(r() * 4);          // 6–9 vertices → irregular blob
+    const avg = 34 + r() * 34;                  // rough radius
+    const verts = [];
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * Math.PI * 2 + (r() - 0.5) * 0.5;
+      const rad = avg * (0.55 + r() * 0.65);
+      verts.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad });
+    }
+    return { cx, cy, avg, verts };
+  }
+
+  function makeObstacles(r, start, target) {
+    const list = [];
+    let tries = 0;
+    while (list.length < OBSTACLES && tries++ < 400) {
+      const cx = MARGIN + 40 + r() * (W - 2 * MARGIN - 80);
+      const cy = MARGIN + r() * (H - 2 * MARGIN);
+      const o = makeObstacle(r, cx, cy);
+      const pad = o.avg + 26;
+      if (Math.hypot(cx - start.x, cy - start.y) < pad + 60) continue;
+      if (Math.hypot(cx - target.x, cy - target.y) < pad + 40) continue;
+      // keep the direct start→target line clear so every course is solvable
+      if (distToSeg(cx, cy, start.x, start.y, target.x, target.y) < pad) continue;
+      if (list.some(p => Math.hypot(cx - p.cx, cy - p.cy) < pad + p.avg)) continue;
+      list.push(o);
+    }
+    return list;
+  }
+
+  function makeCourse(seed) {
+    const r = rng(seed);
+    const start = {
+      x: MARGIN + r() * (W * 0.32),
+      y: MARGIN + r() * (H - 2 * MARGIN),
+    };
+    let target;
+    do {
+      target = {
+        x: W - MARGIN - r() * (W * 0.32),
+        y: MARGIN + r() * (H - 2 * MARGIN),
+      };
+    } while (Math.hypot(target.x - start.x, target.y - start.y) < 420);
+    return {
+      seed,
+      start,
+      target,
+      radius: TARGET_R,
+      obstacles: makeObstacles(r, start, target),
+      direct: Math.hypot(target.x - start.x, target.y - start.y),
+    };
+  }
+
+  // ---- state ---------------------------------------------------------------
+  let state;
+  let refactorArming = false; // /refactor selected → waiting for the player to tap a block
+  const pending = { plan: false, planReview: false, codeReview: false };
+  let sessionStart = performance.now();
+
+  function freshState(seed) {
+    const course = makeCourse(seed);
+    return {
+      version: VERSION,
+      course,
+      ball: { x: course.start.x, y: course.start.y },
+      shots: 0,
+      totalDistance: 0,
+      elapsedMs: 0,
+      commits: [{ x: course.start.x, y: course.start.y }],
+      trail: [],
+      won: false,
+    };
+  }
+
+  function newSeed() {
+    // Date.now is fine in the browser; keeps courses unpredictable between runs.
+    return (Date.now() ^ (performance.now() * 1000)) >>> 0;
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (!s || s.version !== VERSION || !s.course) return null;
+      // recompute derived fields defensively
+      s.course.direct = Math.hypot(
+        s.course.target.x - s.course.start.x,
+        s.course.target.y - s.course.start.y
+      );
+      return s;
+    } catch { return null; }
+  }
+
+  function foldClock() {
+    const now = performance.now();
+    state.elapsedMs += now - sessionStart;
+    sessionStart = now;
+  }
+
+  function save() {
+    if (!state.won) foldClock();
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {}
+  }
+
+  function elapsedSeconds() {
+    const running = state.won ? 0 : (performance.now() - sessionStart);
+    return (state.elapsedMs + running) / 1000;
+  }
+
+  function score() {
+    if (state.totalDistance <= 0) return 0;
+    const eff = state.course.direct / state.totalDistance; // ≤ 1, 1 = perfect line
+    const pts = 1000 * eff - 25 * state.shots - elapsedSeconds();
+    return Math.max(0, Math.round(pts));
+  }
+
+  // ---- shot resolution -----------------------------------------------------
+  function distanceToTarget() {
+    return Math.hypot(state.course.target.x - state.ball.x, state.course.target.y - state.ball.y);
+  }
+
+  // accuracy cone half-angle from the ABSOLUTE shot distance (independent of how far
+  // the target is), narrowed by the pre-shot planning skills.
+  function coneHalf(dist) {
+    let half = Math.min(1, dist / SPREAD_DIST) * Math.PI;
+    if (pending.plan) half *= 0.5;
+    if (pending.planReview) half *= 0.5;
+    return half;
+  }
+
+  // intersection of ray (p, unit dir) with segment a→b; returns {t,u} or null
+  function raySeg(px, py, dx, dy, ax, ay, bx, by) {
+    const ex = bx - ax, ey = by - ay;
+    const det = ex * dy - dx * ey;
+    if (Math.abs(det) < 1e-9) return null;
+    const t = (-(ax - px) * ey + ex * (ay - py)) / det;   // distance along dir (unit)
+    const u = (dx * (ay - py) - (ax - px) * dy) / det;     // param along segment
+    return { t, u };
+  }
+
+  function pathLength(path) {
+    let d = 0;
+    for (let i = 1; i < path.length; i++) d += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    return d;
+  }
+
+  // fly a fixed distance budget from `from` along `angle`, bouncing off obstacle
+  // edges and walls; hole out if the traced path passes within the target radius.
+  function simulateFlight(from, angle, budget) {
+    const EPS = 0.5;
+    const c = state.course, target = c.target;
+    const edges = [];
+    for (const o of c.obstacles)
+      for (let i = 0, j = o.verts.length - 1; i < o.verts.length; j = i++)
+        edges.push([o.verts[j].x, o.verts[j].y, o.verts[i].x, o.verts[i].y]);
+    edges.push([0, 0, W, 0], [W, 0, W, H], [W, H, 0, H], [0, H, 0, 0]);
+
+    let pos = { x: from.x, y: from.y };
+    let dir = { x: Math.cos(angle), y: Math.sin(angle) };
+    let remaining = budget;
+    const path = [{ x: pos.x, y: pos.y }];
+    let holed = false;
+
+    for (let bounce = 0; bounce < 40 && remaining > EPS; bounce++) {
+      let best = null;
+      for (const e of edges) {
+        const hit = raySeg(pos.x, pos.y, dir.x, dir.y, e[0], e[1], e[2], e[3]);
+        if (hit && hit.t > EPS && hit.t <= remaining + EPS && hit.u >= -1e-6 && hit.u <= 1 + 1e-6) {
+          if (!best || hit.t < best.t) best = { t: hit.t, e };
+        }
+      }
+      const segLen = best ? best.t : remaining;
+      const ex = pos.x + dir.x * segLen, ey = pos.y + dir.y * segLen;
+
+      // hole out if this leg passes within the target radius
+      const len2 = segLen * segLen || 1;
+      let ct = ((target.x - pos.x) * dir.x + (target.y - pos.y) * dir.y) / segLen;
+      ct = Math.max(0, Math.min(segLen, ct)) / segLen;
+      const cx = pos.x + (ex - pos.x) * ct, cy = pos.y + (ey - pos.y) * ct;
+      if (Math.hypot(target.x - cx, target.y - cy) <= c.radius + BALL_R) {
+        path.push({ x: cx, y: cy });
+        holed = true;
+        break;
+      }
+
+      pos = { x: ex, y: ey };
+      remaining -= segLen;
+      path.push({ x: pos.x, y: pos.y });
+      if (!best) break;
+
+      // reflect direction across the hit edge's normal
+      let nx = -(best.e[3] - best.e[1]), ny = best.e[2] - best.e[0];
+      const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+      const dot = dir.x * nx + dir.y * ny;
+      dir = { x: dir.x - 2 * dot * nx, y: dir.y - 2 * dot * ny };
+      pos = { x: pos.x + dir.x * EPS, y: pos.y + dir.y * EPS };
+      path[path.length - 1] = { x: pos.x, y: pos.y };
+      remaining -= EPS;
+    }
+    return { path, holed };
+  }
+
+  function fireShot(aimAngle, scope) {
+    if (anim || state.won || scope <= 0.01) return;
+
+    const budget = scope * MAX_REACH * distanceToTarget();
+    const half = coneHalf(budget);                   // spread depends on shot distance, not target distance
+    let u = Math.random() * 2 - 1;
+    if (pending.codeReview) {                        // bias toward the aim line
+      const u2 = Math.random() * 2 - 1;
+      if (Math.abs(u2) < Math.abs(u)) u = u2;
+    }
+    const angle = aimAngle + u * half;
+
+    const from = { ...state.ball };
+    const { path, holed } = simulateFlight(from, angle, budget);
+
+    state.shots += 1;
+    state.totalDistance += pathLength(path);
+    state.trail.push(path);
+    resetPending();
+
+    anim = { path, total: pathLength(path), holed, start: performance.now() };
+    save();   // persist the shot immediately; the rAF loop handles redraw
+  }
+
+  function landShot(anim) {
+    const end = anim.path[anim.path.length - 1];
+    state.ball = { x: end.x, y: end.y };
+    state.commits.push({ x: end.x, y: end.y });
+    ripple = { x: end.x, y: end.y, start: performance.now() };
+
+    // authoritative check: the ball counts as holed if it comes to rest overlapping
+    // the target, catching any case the in-flight pass-through check missed.
+    const c = state.course;
+    const restHoled = Math.hypot(end.x - c.target.x, end.y - c.target.y) <= c.radius + BALL_R;
+    if (anim.holed || restHoled) {
+      state.won = true;
+      foldClock();
+      showWin();
+    }
+    save();
+    syncSkills();
+  }
+
+  function toggleRefactor() {
+    if (anim || state.won) return;
+    if (refactorArming) { refactorArming = false; }           // click again to cancel
+    else if (state.course.obstacles.length) { refactorArming = true; }
+    syncSkills();
+  }
+
+  function removeObstacleAt(idx) {
+    if (idx == null || idx < 0) { refactorArming = false; syncSkills(); return; }
+    state.course.obstacles.splice(idx, 1);
+    refactorArming = false;
+    state.elapsedMs += SKILLS["refactor"].penalty * 1000;
+    save();
+    syncSkills();
+  }
+
+  // ---- skills --------------------------------------------------------------
+  function resetPending() {
+    pending.plan = pending.planReview = pending.codeReview = false;
+  }
+
+  function useSkill(id) {
+    if (anim || state.won) return;
+    if (id === "refactor") { toggleRefactor(); return; }
+    if (id === "plan") {
+      if (pending.plan) return;
+      pending.plan = true;
+    } else if (id === "plan-review") {
+      if (!pending.plan || pending.planReview) return;
+      pending.planReview = true;
+    } else if (id === "code-review") {
+      if (pending.codeReview) return;
+      pending.codeReview = true;
+    }
+    state.elapsedMs += SKILLS[id].penalty * 1000;
+    save();
+    syncSkills();
+  }
+
+  function syncSkills() {
+    for (const btn of skillButtons) {
+      const id = btn.dataset.skill;
+      let active = false, disabled = state.won || !!anim;
+      if (id === "plan") { active = pending.plan; disabled = disabled || pending.plan; }
+      else if (id === "plan-review") { active = pending.planReview; disabled = disabled || !pending.plan || pending.planReview; }
+      else if (id === "code-review") { active = pending.codeReview; disabled = disabled || pending.codeReview; }
+      else if (id === "refactor") { active = refactorArming; disabled = disabled || state.course.obstacles.length === 0; }
+      btn.classList.toggle("active", active);
+      btn.disabled = disabled;
+    }
+  }
+
+  // ---- rendering -----------------------------------------------------------
+  const stage = document.getElementById("stage");
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  let scale = 1;
+
+  function resize() {
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    scale = canvas.width / W;
+  }
+  window.addEventListener("resize", resize);
+
+  let anim = null;              // { from, to, start }
+  let ripple = null;
+  let aim = null;               // live aim while dragging { angle, scope, dist, half }
+
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+
+  function draw() {
+    const now = performance.now();
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // backdrop grid
+    ctx.fillStyle = "#0a0f18";
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(90,120,170,.07)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y <= H; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    const c = state.course;
+
+    drawObstacles(now);
+
+    // trail (each shot is a bounced polyline)
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (let i = 0; i < state.trail.length; i++) {
+      const path = state.trail[i];
+      const a = 0.12 + 0.5 * (i + 1) / state.trail.length;
+      ctx.strokeStyle = `rgba(110,168,255,${a})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+      for (let k = 1; k < path.length; k++) ctx.lineTo(path[k].x, path[k].y);
+      ctx.stroke();
+    }
+    for (const cm of state.commits) {
+      ctx.fillStyle = "rgba(110,168,255,.55)";
+      ctx.beginPath(); ctx.arc(cm.x, cm.y, 3.2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // target
+    const pulse = 1 + 0.12 * Math.sin(now / 420);
+    glow(() => {
+      ctx.strokeStyle = "rgba(255,207,92,.9)";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(c.target.x, c.target.y, c.radius * pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "rgba(255,207,92,.14)";
+      ctx.beginPath(); ctx.arc(c.target.x, c.target.y, c.radius, 0, Math.PI * 2); ctx.fill();
+    }, "#ffcf5c", 22);
+    ctx.fillStyle = "#ffcf5c";
+    ctx.beginPath(); ctx.arc(c.target.x, c.target.y, 4, 0, Math.PI * 2); ctx.fill();
+
+    // aim preview
+    if (aim && !anim && !state.won && !refactorArming) drawAim(aim);
+
+    // ripple on landing
+    if (ripple) {
+      const t = (now - ripple.start) / 520;
+      if (t >= 1) ripple = null;
+      else {
+        ctx.strokeStyle = `rgba(126,240,166,${(1 - t) * 0.8})`;
+        ctx.lineWidth = 3 * (1 - t) + 1;
+        ctx.beginPath(); ctx.arc(ripple.x, ripple.y, 8 + t * 60, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    // ball (animate flight along the bounced polyline)
+    let bx = state.ball.x, by = state.ball.y;
+    if (anim) {
+      const t = Math.min(1, (now - anim.start) / FLIGHT_MS);
+      const target = easeOut(t) * anim.total;
+      // walk the polyline to the eased arc-length
+      let acc = 0, k = 1;
+      const p = anim.path;
+      bx = p[0].x; by = p[0].y;
+      for (; k < p.length; k++) {
+        const segLen = Math.hypot(p[k].x - p[k - 1].x, p[k].y - p[k - 1].y);
+        if (acc + segLen >= target || k === p.length - 1) {
+          const f = segLen ? Math.min(1, (target - acc) / segLen) : 1;
+          bx = p[k - 1].x + (p[k].x - p[k - 1].x) * f;
+          by = p[k - 1].y + (p[k].y - p[k - 1].y) * f;
+          break;
+        }
+        acc += segLen;
+      }
+      // motion streak: the path already flown
+      ctx.strokeStyle = "rgba(74,214,196,.4)";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);
+      for (let m = 1; m < k; m++) ctx.lineTo(p[m].x, p[m].y);
+      ctx.lineTo(bx, by); ctx.stroke();
+      if (t >= 1) {
+        const done = anim;
+        anim = null;
+        landShot(done);
+      }
+    }
+    glow(() => {
+      ctx.fillStyle = "#4ad6c4";
+      ctx.beginPath(); ctx.arc(bx, by, 8.5, 0, Math.PI * 2); ctx.fill();
+    }, "#4ad6c4", 18);
+    ctx.fillStyle = "rgba(255,255,255,.85)";
+    ctx.beginPath(); ctx.arc(bx - 2.5, by - 2.5, 2.4, 0, Math.PI * 2); ctx.fill();
+
+    updateHud();
+  }
+
+  function drawAim(a) {
+    const b = state.ball;
+    // cone
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.arc(b.x, b.y, a.dist, a.angle - a.half, a.angle + a.half);
+    ctx.closePath();
+    const wild = a.half / Math.PI; // 0..1
+    ctx.fillStyle = `rgba(${Math.round(120 + wild * 135)}, ${Math.round(200 - wild * 120)}, 140, .13)`;
+    ctx.fill();
+    // aim center line
+    ctx.strokeStyle = "rgba(231,238,252,.7)";
+    ctx.setLineDash([7, 6]);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x + Math.cos(a.angle) * a.dist, b.y + Math.sin(a.angle) * a.dist);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // scope label
+    ctx.fillStyle = "#e7eefc";
+    ctx.font = "600 14px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(`scope ${Math.round(a.scope * 100)}%`, b.x + 12, b.y - 12);
+  }
+
+  function glow(fn, color, blur) {
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = blur;
+    fn();
+    ctx.restore();
+  }
+
+  function tracePoly(verts) {
+    ctx.beginPath();
+    ctx.moveTo(verts[0].x, verts[0].y);
+    for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
+    ctx.closePath();
+  }
+
+  function drawObstacles(now) {
+    const obs = state.course.obstacles;
+    const flash = refactorArming ? 0.5 + 0.5 * Math.sin(now / 160) : 0;  // synced pulse while armed
+    for (let i = 0; i < obs.length; i++) {
+      const o = obs[i];
+      // body — "legacy code" block
+      tracePoly(o.verts);
+      ctx.fillStyle = refactorArming ? `rgba(74,214,196,${0.10 + flash * 0.14})` : "rgba(38,50,72,.92)";
+      ctx.fill();
+      // hatch fill for texture
+      ctx.save();
+      tracePoly(o.verts); ctx.clip();
+      ctx.strokeStyle = refactorArming ? "rgba(74,214,196,.28)" : "rgba(120,140,180,.16)";
+      ctx.lineWidth = 1;
+      for (let x = o.cx - o.avg * 1.6; x < o.cx + o.avg * 1.6; x += 9) {
+        ctx.beginPath(); ctx.moveTo(x, o.cy - o.avg * 1.6); ctx.lineTo(x + o.avg * 1.6, o.cy + o.avg * 1.6); ctx.stroke();
+      }
+      ctx.restore();
+      // border
+      if (refactorArming) {
+        glow(() => {
+          tracePoly(o.verts);
+          ctx.strokeStyle = `rgba(74,214,196,${0.5 + flash * 0.5})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }, "#4ad6c4", 14);
+      } else {
+        tracePoly(o.verts);
+        ctx.strokeStyle = "rgba(130,150,190,.5)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // ---- HUD -----------------------------------------------------------------
+  const el = id => document.getElementById(id);
+  function fmtTime(s) {
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+  function updateHud() {
+    el("stat-shots").textContent = state.shots;
+    el("stat-dist").textContent = Math.round(state.totalDistance);
+    el("stat-time").textContent = fmtTime(elapsedSeconds());
+    el("stat-score").textContent = score();
+  }
+
+  // ---- input ---------------------------------------------------------------
+  let dragging = false;
+  let downPos = null;
+  function obstacleAt(p) {
+    const obs = state.course.obstacles;
+    for (let i = 0; i < obs.length; i++) if (pointInPoly(p.x, p.y, obs[i].verts)) return i;
+    return -1;
+  }
+  function toLogical(ev) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (ev.clientX - rect.left) / rect.width * W,
+      y: (ev.clientY - rect.top) / rect.height * H,
+    };
+  }
+  function computeAim(p) {
+    const b = state.ball;
+    const dx = p.x - b.x, dy = p.y - b.y;         // aim & land where the cursor is
+    const pull = Math.hypot(dx, dy);
+    const maxReach = MAX_REACH * distanceToTarget();
+    const dist = Math.min(pull, maxReach);        // intended travel = cursor distance, capped at max reach
+    const scope = maxReach > 0 ? dist / maxReach : 0;
+    const angle = Math.atan2(dy, dx);
+    return { angle, scope, dist, half: coneHalf(dist) };
+  }
+  let lastPos = null;
+  canvas.addEventListener("pointerdown", (ev) => {
+    if (anim || state.won) return;
+    dragging = true;
+    downPos = lastPos = toLogical(ev);
+    canvas.setPointerCapture(ev.pointerId);
+    aim = computeAim(downPos);
+  });
+  canvas.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    lastPos = toLogical(ev);
+    aim = computeAim(lastPos);
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    const moved = (downPos && lastPos) ? Math.hypot(lastPos.x - downPos.x, lastPos.y - downPos.y) : 0;
+    if (refactorArming) {                           // armed: a tap deletes the tapped block (or cancels)
+      if (moved < 8) removeObstacleAt(obstacleAt(downPos));
+    } else if (moved >= 8 && aim && aim.scope > 0.01) {
+      fireShot(aim.angle, aim.scope);
+    }
+    aim = null;
+  }
+  canvas.addEventListener("pointerup", (ev) => { if (dragging) lastPos = toLogical(ev); endDrag(); });
+  canvas.addEventListener("pointercancel", () => { dragging = false; aim = null; });
+
+  // ---- skills / buttons ----------------------------------------------------
+  const skillButtons = [...document.querySelectorAll(".skill")];
+  skillButtons.forEach(b => b.addEventListener("click", () => useSkill(b.dataset.skill)));
+
+  function startCourse(seed) {
+    state = freshState(seed);
+    refactorArming = false;
+    resetPending();
+    ripple = null; anim = null; aim = null;
+    state.elapsedMs = 0;
+    sessionStart = performance.now();
+    hideWin();
+    save();
+    syncSkills();
+  }
+  el("new-course").addEventListener("click", () => startCourse(newSeed()));
+  el("ov-new").addEventListener("click", () => startCourse(newSeed()));
+
+  // ---- win overlay ---------------------------------------------------------
+  function showWin() {
+    el("ov-summary").innerHTML =
+      `Delivered in <b>${state.shots}</b> prompts over <b>${Math.round(state.totalDistance)}</b> units ` +
+      `in <b>${fmtTime(elapsedSeconds())}</b>.<br>Final score <b>${score()}</b>.`;
+    el("overlay").classList.add("show");
+    syncSkills();
+  }
+  function hideWin() { el("overlay").classList.remove("show"); }
+
+  // ---- boot ----------------------------------------------------------------
+  state = load();
+  if (!state) { state = freshState(newSeed()); save(); }
+  else { sessionStart = performance.now(); }
+  if (state.won) showWin();
+
+  resize();
+  syncSkills();
+  (function loop() { draw(); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>
